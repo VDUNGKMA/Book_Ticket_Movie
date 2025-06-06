@@ -1213,104 +1213,6 @@ export const getMovieRatings = async (movieId: number) => {
   return response.data;
 };
 
-// Lấy danh sách phim gợi ý cá nhân hóa cho user (Wide&Deep)
-export const getPersonalRecommendations = async (
-  userId: number,
-  topN: number = 10
-) => {
-  try {
-    const response = await api.get(`/recommendations/widedeep`, {
-      params: { userId, topN },
-    });
-    return response.data;
-  } catch (error: any) {
-    throw {
-      message:
-        error?.response?.data?.message || "Không thể lấy gợi ý phim cá nhân.",
-    };
-  }
-};
-
-// Lấy danh sách phim mới ra rạp
-export const getNewMovies = async (topN: number = 10) => {
-  try {
-    const response = await api.get(`/recommendations/new`, {
-      params: { topN },
-    });
-    return response.data;
-  } catch (error: any) {
-    throw {
-      message: error?.response?.data?.message || "Không thể lấy phim mới.",
-    };
-  }
-};
-
-// Lấy gợi ý phim theo vị trí
-export const getMoviesByLocation = async (
-  location: string,
-  topN: number = 10
-) => {
-  try {
-    const response = await api.get(`/recommendations/by-location`, {
-      params: { location, topN },
-    });
-    return response.data;
-  } catch (error: any) {
-    throw {
-      message:
-        error?.response?.data?.message || "Không thể lấy gợi ý theo vị trí.",
-    };
-  }
-};
-
-// Lấy gợi ý phim theo thời tiết
-export const getMoviesByWeather = async (
-  location: string,
-  topN: number = 10
-) => {
-  try {
-    const response = await api.get(`/recommendations/by-weather`, {
-      params: { location, topN },
-    });
-    return response.data;
-  } catch (error: any) {
-    throw {
-      message:
-        error?.response?.data?.message || "Không thể lấy gợi ý theo thời tiết.",
-    };
-  }
-};
-
-// Lấy gợi ý phim theo ngày lễ
-export const getMoviesByHoliday = async (topN: number = 10) => {
-  try {
-    const response = await api.get(`/recommendations/by-holiday`, {
-      params: { topN },
-    });
-    return response.data;
-  } catch (error: any) {
-    throw {
-      message:
-        error?.response?.data?.message || "Không thể lấy gợi ý theo ngày lễ.",
-    };
-  }
-};
-
-// Lấy gợi ý phim theo thời gian
-export const getMoviesByTime = async (topN: number = 10) => {
-  try {
-    const response = await api.get(`/recommendations/by-time`, {
-      params: { topN },
-    });
-    return response.data;
-  } catch (error: any) {
-    throw {
-      message:
-        error?.response?.data?.message || "Không thể lấy gợi ý theo thời gian.",
-    };
-  }
-};
-
 // Lấy toàn bộ danh sách phim (dùng cho map poster_url)
 export const getAllMovies = async () => {
   try {
@@ -1352,6 +1254,116 @@ export const getPendingFriendRequests = async () => {
 
 export const searchUsers = async (query: string) => {
   const response = await api.get("/users/search", { params: { query } });
+  return response.data;
+};
+
+// Recommendation APIs
+export const getPersonalRecommendationsByToken = (token: string) =>
+  fetch(`${BASE_URL}/recommendations/personal`, {
+    headers: { Authorization: `Bearer ${token}` },
+  }).then((res) => res.json());
+
+export const getPersonalRecommendationsByUserId = async (
+  userId: number,
+  topN: number = 10
+) => {
+  try {
+    const response = await api.get(`/recommendations/widedeep`, {
+      params: { userId, topN },
+    });
+    return response.data;
+  } catch (error: any) {
+    throw {
+      message:
+        error?.response?.data?.message || "Không thể lấy gợi ý phim cá nhân.",
+    };
+  }
+};
+
+export const getSimilarMovies = async (movieId: number) => {
+  try {
+    const response = await api.get(`/recommendations/similar/${movieId}`);
+    return response.data;
+  } catch (error: any) {
+    throw {
+      message: error?.response?.data?.message || "Không thể lấy phim tương tự.",
+    };
+  }
+};
+
+export const getRecommendationsByTime = () =>
+  fetch(`${BASE_URL}/recommendations/by-time`).then((res) => res.json());
+
+export const getRecommendationsByLocation = (lat: number, lng: number) =>
+  fetch(
+    `${BASE_URL}/recommendations/by-location?latitude=${lat}&longitude=${lng}`
+  ).then((res) => res.json());
+
+export const getRecommendationsByWeather = (lat: number, lng: number) =>
+  fetch(
+    `${BASE_URL}/recommendations/by-weather?latitude=${lat}&longitude=${lng}`
+  ).then((res) => res.json());
+
+export const searchMovies = async (params: {
+  query?: string;
+  genre?: string;
+  year?: string;
+  rating?: string;
+  sort?: string;
+}) => {
+  const response = await api.get("/movies", { params });
+  return response.data;
+};
+
+// Gợi ý phim kèm suất chiếu phù hợp
+export interface MovieWithScreenings {
+  movie_id: number;
+  score: number;
+  recommendation_type: string;
+  context_data?: any;
+  movie: any; // hoặc Movie nếu muốn strict
+  screenings: any[]; // hoặc Screening[] nếu muốn strict
+}
+
+export const getRecommendedMoviesWithScreenings = async (
+  userId: number,
+  lat?: number,
+  lng?: number
+): Promise<MovieWithScreenings[]> => {
+  const params: any = { userId };
+  if (lat) params.lat = lat;
+  if (lng) params.lng = lng;
+  const res = await api.get<MovieWithScreenings[]>(
+    "/recommendations/movie-with-screenings",
+    { params }
+  );
+  return res.data;
+};
+
+// Gợi ý nhóm bạn bè
+export const getGroupAdvancedRecommendations = async () => {
+  const response = await api.get("/recommendations/group-advanced");
+  return response.data;
+};
+
+// Gửi invite cho nhiều bạn bè
+export const sendScreeningInvites = async (
+  receiverIds: number[],
+  screeningId: number,
+  message: string
+) => {
+  console.log("[Invite] Gửi lời mời:", { receiverIds, screeningId, message });
+  const response = await api.post("/recommendations/invite", {
+    receiverIds,
+    screeningId,
+    message,
+  });
+  return response.data;
+};
+
+// Lấy lịch sử invite
+export const getInviteHistory = async () => {
+  const response = await api.get("/recommendations/invite-history");
   return response.data;
 };
 

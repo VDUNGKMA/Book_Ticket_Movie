@@ -70,6 +70,7 @@ export type RootStackParamList = {
   Security: undefined;
   Notifications: undefined;
   Search: undefined;
+  SearchMain: undefined;
   Cinemas: undefined;
   CinemasMap: undefined;
   CinemasList: undefined;
@@ -159,4 +160,7 @@ export type RootStackParamList = {
   UserProfile: undefined;
   EditProfileScreen: undefined;
   Recommendation: undefined;
+  ChatSuggest: undefined;
+  GroupRecommendation: undefined;
+  InviteHistory: undefined;
 };

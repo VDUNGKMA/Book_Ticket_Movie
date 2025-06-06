@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createStackNavigator } from "@react-navigation/stack";
 import * as SecureStore from "expo-secure-store";
@@ -38,8 +37,8 @@ import MessageDetailScreen from "../screens/MessageDetailScreen";
 import CreateAccountScreen from "../screens/CreateAccountScreen";
 import NotificationScreen from "../screens/NotificationScreen";
 import PayPalPaymentScreen from "../screens/PayPalPaymentScreen";
-import RecommendationScreen from "../screens/RecommendationScreen";
 import VideoCallScreen from "../screens/VideoCallScreen";
+import GroupRecommendationScreen from "../screens/GroupRecommendationScreen";
 
 import {
   SafeAreaView,
@@ -47,24 +46,35 @@ import {
 } from "react-native-safe-area-context";
 import BookingScreen from "../screens/BookingScreen";
 import FoodDrinkScreen from "../screens/FoodDrinkScreen";
+import IncomingCallModal from "../components/IncomingCallModal";
 type IconName = keyof typeof Ionicons.glyphMap;
 
 const Tab = createBottomTabNavigator<RootStackParamList>();
 const Stack = createStackNavigator<RootStackParamList>();
 const MessageStack = createStackNavigator<MessageStackParamList>();
+const MainStack = createStackNavigator<RootStackParamList>();
+const SearchStack = createStackNavigator<RootStackParamList>();
 
-const HomeStack = () => (
-  <Stack.Navigator screenOptions={{ headerShown: false }}>
-    <Stack.Screen name="HomeScreen" component={HomeScreen} />
-    <Stack.Screen name="MovieDetail" component={MovieDetailScreen} />
-    <Stack.Screen name="MovieDetailScreen" component={MovieDetailScreen} />
-    <Stack.Screen name="Booking" component={BookingScreen} />
-    <Stack.Screen name="SelectSeatsScreen" component={SelectSeatsScreen} />
-    <Stack.Screen name="CheckoutScreen" component={CheckoutScreen} />
-    <Stack.Screen name="FoodDrinkScreen" component={FoodDrinkScreen} />
-    <Stack.Screen name="PayPalPaymentScreen" component={PayPalPaymentScreen} />
-    <Stack.Screen name="Notifications" component={NotificationScreen} />
-  </Stack.Navigator>
+const MainStackScreen = () => (
+  <MainStack.Navigator screenOptions={{ headerShown: false }}>
+    <MainStack.Screen name="HomeScreen" component={HomeScreen} />
+    <MainStack.Screen name="MovieList" component={MovieListScreen} />
+    <MainStack.Screen name="MovieDetail" component={MovieDetailScreen} />
+    <MainStack.Screen name="Booking" component={BookingScreen} />
+    <MainStack.Screen name="SelectSeatsScreen" component={SelectSeatsScreen} />
+    <MainStack.Screen name="CheckoutScreen" component={CheckoutScreen} />
+    <MainStack.Screen name="FoodDrinkScreen" component={FoodDrinkScreen} />
+    <MainStack.Screen
+      name="PayPalPaymentScreen"
+      component={PayPalPaymentScreen}
+    />
+    <MainStack.Screen name="Notifications" component={NotificationScreen} />
+    <MainStack.Screen
+      name="GroupRecommendation"
+      component={GroupRecommendationScreen}
+      options={{ title: "Gợi ý nhóm bạn bè" }}
+    />
+  </MainStack.Navigator>
 );
 
 const AuthStack = () => (
@@ -144,6 +154,13 @@ const MessageStackScreen = () => (
   </MessageStack.Navigator>
 );
 
+const SearchStackScreen = () => (
+  <SearchStack.Navigator screenOptions={{ headerShown: false }}>
+    <SearchStack.Screen name="SearchMain" component={SearchScreen} />
+    <SearchStack.Screen name="MovieDetail" component={MovieDetailScreen} />
+  </SearchStack.Navigator>
+);
+
 export const AppContent: React.FC = () => {
   const insets = useSafeAreaInsets();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -199,145 +216,66 @@ export const AppContent: React.FC = () => {
   }
 
   return (
-    <ThemeProvider>
-      <ChatProvider>
-        <SafeAreaView style={{ flex: 1, backgroundColor: "#121212" }}>
-          <NavigationContainer>
-            <Tab.Navigator
-              initialRouteName={isAuthenticated ? "Home" : "Auth"}
-              screenOptions={({ route }) => ({
-                tabBarIcon: ({ focused, color, size }) => {
-                  let iconName: IconName = "alert";
-
-                  if (route.name === "Home") {
-                    iconName = focused ? "home" : "home-outline";
-                  } else if (route.name === "Auth") {
-                    iconName = focused ? "log-in" : "log-in-outline";
-                  } else if (route.name === "MovieList") {
-                    iconName = focused ? "film" : "film-outline";
-                  } else if (route.name === "Settings") {
-                    iconName = focused ? "settings" : "settings-outline";
-                  } else if (route.name === "Search") {
-                    iconName = focused ? "search" : "search-outline";
-                  } else if (route.name === "Cinemas") {
-                    iconName = focused ? "location" : "location-outline";
-                  } else if (route.name === "Favorite") {
-                    iconName = focused ? "heart" : "heart-outline";
-                  } else if (route.name === "MyTicket") {
-                    iconName = focused ? "ticket" : "ticket-outline";
-                  } else if (route.name === "Message") {
-                    iconName = focused ? "chatbubble" : "chatbubble-outline";
-                  } else if (route.name === "Recommendation") {
-                    iconName = focused ? "star" : "star-outline";
-                  }
-
-                  return <Ionicons name={iconName} size={size} color={color} />;
-                },
-                tabBarActiveTintColor: "#FF4444",
-                tabBarInactiveTintColor: "#888",
-                tabBarStyle: {
-                  backgroundColor: "#1C2526",
-                  borderTopWidth: 0,
-                  height: 60,
-                  paddingBottom: 10,
-                },
-                tabBarLabelStyle: {
-                  fontSize: 12,
-                  fontWeight: "500",
-                  marginBottom: 5,
-                },
-                headerShown: false,
-              })}
-            >
-              {isAuthenticated ? (
-                // Các tab khi đã đăng nhập
-                <>
-                  <Tab.Screen
-                    name="Home"
-                    component={HomeStack}
-                    options={{ headerShown: false }}
-                  />
-                  <Tab.Screen
-                    name="MovieList"
-                    component={MovieListScreen}
-                    options={{ headerShown: false }}
-                  />
-                  <Tab.Screen
-                    name="Search"
-                    component={SearchScreen}
-                    options={{ headerShown: false }}
-                  />
-                  <Tab.Screen
-                    name="Cinemas"
-                    component={CinemasStackScreen}
-                    options={{ headerShown: false }}
-                  />
-                  <Tab.Screen
-                    name="Favorite"
-                    component={MyFavoriteScreen}
-                    options={{ headerShown: false }}
-                  />
-                  <Tab.Screen
-                    name="MyTicket"
-                    component={MyTicketStack}
-                    options={{ headerShown: false }}
-                  />
-                  <Tab.Screen
-                    name="Message"
-                    component={MessageStackScreen}
-                    options={{ headerShown: false }}
-                  />
-                  <Tab.Screen
-                    name="Settings"
-                    component={SettingsStack}
-                    options={{ headerShown: false }}
-                  />
-                  <Tab.Screen
-                    name="Recommendation"
-                    component={RecommendationScreen}
-                    options={{
-                      headerShown: false,
-                      tabBarLabel: "Gợi ý",
-                    }}
-                  />
-                </>
-              ) : (
-                // Các tab khi chưa đăng nhập
-                <>
-                  <Tab.Screen
-                    name="Home"
-                    component={HomeStack}
-                    options={{ headerShown: false }}
-                  />
-                  <Tab.Screen
-                    name="MovieList"
-                    component={MovieListScreen}
-                    options={{ headerShown: false }}
-                  />
-                  <Tab.Screen
-                    name="Search"
-                    component={SearchScreen}
-                    options={{ headerShown: false }}
-                  />
-                  <Tab.Screen
-                    name="Cinemas"
-                    component={CinemasStackScreen}
-                    options={{ headerShown: false }}
-                  />
-                  <Tab.Screen
-                    name="Auth"
-                    component={AuthStack}
-                    options={{
-                      headerShown: false,
-                    }}
-                  />
-                </>
-              )}
-            </Tab.Navigator>
-          </NavigationContainer>
-        </SafeAreaView>
-      </ChatProvider>
-    </ThemeProvider>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#121212" }}>
+      <Tab.Navigator
+        initialRouteName={isAuthenticated ? "Home" : "Auth"}
+        screenOptions={({ route }) => ({
+          tabBarIcon: ({ focused, color, size }) => {
+            let iconName: IconName = "alert";
+            if (route.name === "Home") {
+              iconName = focused ? "home" : "home-outline";
+            } else if (route.name === "Auth") {
+              iconName = focused ? "log-in" : "log-in-outline";
+            } else if (route.name === "MovieList") {
+              iconName = focused ? "film" : "film-outline";
+            } else if (route.name === "Settings") {
+              iconName = focused ? "settings" : "settings-outline";
+            } else if (route.name === "Search") {
+              iconName = focused ? "search" : "search-outline";
+            } else if (route.name === "Cinemas") {
+              iconName = focused ? "location" : "location-outline";
+            } else if (route.name === "Favorite") {
+              iconName = focused ? "heart" : "heart-outline";
+            } else if (route.name === "MyTicket") {
+              iconName = focused ? "ticket" : "ticket-outline";
+            } else if (route.name === "Message") {
+              iconName = focused ? "chatbubble" : "chatbubble-outline";
+            } else if (route.name === "Recommendation") {
+              iconName = focused ? "star" : "star-outline";
+            }
+            return <Ionicons name={iconName} size={size} color={color} />;
+          },
+          tabBarActiveTintColor: "#FF4444",
+          tabBarInactiveTintColor: "#fff",
+          tabBarStyle: {
+            backgroundColor: "#1C2526",
+            borderTopWidth: 0,
+            paddingBottom: insets.bottom,
+            height: 60 + insets.bottom,
+          },
+          headerShown: false,
+        })}
+      >
+        {isAuthenticated ? (
+          <>
+            <Tab.Screen name="Home" component={MainStackScreen} />
+            <Tab.Screen name="Search" component={SearchStackScreen} />
+            <Tab.Screen name="Cinemas" component={CinemasStackScreen} />
+            <Tab.Screen name="Favorite" component={MyFavoriteScreen} />
+            <Tab.Screen name="MyTicket" component={MyTicketStack} />
+            <Tab.Screen name="Message" component={MessageStackScreen} />
+            <Tab.Screen name="Settings" component={SettingsStack} />
+          </>
+        ) : (
+          <>
+            <Tab.Screen name="Home" component={MainStackScreen} />
+            <Tab.Screen name="Search" component={SearchStackScreen} />
+            <Tab.Screen name="Auth" component={AuthStack} />
+          </>
+        )}
+      </Tab.Navigator>
+      {isAuthenticated && <IncomingCallModal />}
+    </SafeAreaView>
   );
 };
 

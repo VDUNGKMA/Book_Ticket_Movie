@@ -24,6 +24,13 @@ import { useUserContext } from "../context/UserContext";
 
 type BookingScreenRouteProp = RouteProp<RootStackParamList, "Booking">;
 
+function getLocalDateString(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 const BookingScreen = () => {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const route = useRoute<BookingScreenRouteProp>();
@@ -31,7 +38,7 @@ const BookingScreen = () => {
   const { isLoggedIn } = useUserContext();
 
   const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
+    getLocalDateString(new Date())
   );
   const [expanded, setExpanded] = useState<{ [key: number]: boolean }>({});
   const [screenings, setScreenings] = useState<any[]>([]);
@@ -63,16 +70,20 @@ const BookingScreen = () => {
       const dayName = days[d.getDay()];
       const dayNum = d.getDate();
       const month = months[d.getMonth()];
-      const dateStr = d.toISOString().split("T")[0];
+      const dateStr = getLocalDateString(d);
       return { date: dateStr, day: dayName, dayNum: dayNum, month: month };
     });
   }, []);
 
   // Lấy dữ liệu động từ API
   useEffect(() => {
+    console.log("selectedDate:", selectedDate);
     setLoading(true);
     getScreenings({ movieId, date: selectedDate })
-      .then((data) => setScreenings(data))
+      .then((data) => {
+        console.log("screenings data:", data);
+        setScreenings(data);
+      })
       .catch(() => setScreenings([]))
       .finally(() => setLoading(false));
   }, [movieId, selectedDate]);

@@ -40,7 +40,7 @@ interface Activity {
 const MessageScreen: React.FC = () => {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const { user } = useUserContext();
-  const { messages: chatMessages, onlineFriends } = useChatContext();
+  const { messages: chatMessages, onlineFriends, socket } = useChatContext();
   const [friends, setFriends] = useState<any[]>([]);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [tab, setTab] = useState<"friends" | "pending">("friends");
@@ -146,12 +146,34 @@ const MessageScreen: React.FC = () => {
     }
   }, [badgeCount]);
 
+  useEffect(() => {
+    if (!socket) return;
+    const handleNewMessage = (msg: any) => {
+      // console.log("Nhận được event tin nhắn mới:", msg);
+      fetchFriends();
+    };
+    socket.on("private_message", handleNewMessage);
+    socket.on("image_message", handleNewMessage);
+    socket.on("file_message", handleNewMessage);
+    return () => {
+      socket.off("private_message", handleNewMessage);
+      socket.off("image_message", handleNewMessage);
+      socket.off("file_message", handleNewMessage);
+    };
+  }, [socket]);
+
   const fetchFriends = async () => {
     setLoadingFriends(true);
     try {
       const data = await getFriends();
-      setFriends(data);
-    } catch {}
+      // console.log("fetchFriends - data:", data);
+      setFriends((prev) => {
+        // console.log("setFriends - prev:", prev, "new:", data);
+        return data;
+      });
+    } catch (e) {
+      // console.log("fetchFriends - error:", e);
+    }
     setLoadingFriends(false);
   };
   const fetchPending = async () => {
@@ -261,7 +283,7 @@ const MessageScreen: React.FC = () => {
   };
 
   const renderActivityItem = ({ item }: { item: Activity }) => {
-    console.log("activity.avatar:", item.avatar, "image:", item.image);
+    // console.log("activity.avatar:", item.avatar, "image:", item.image);
     return (
       <TouchableOpacity style={styles.activityItem}>
         <Image
@@ -287,8 +309,37 @@ const MessageScreen: React.FC = () => {
     f.name.toLowerCase().includes(friendSearch.toLowerCase())
   );
 
-  const renderFriendItem = ({ item }: { item: any }) => {
-    console.log("friend.avatar:", item.avatar, "image:", item.image);
+  // Dùng trực tiếp friends (đã có lastMessage từ backend) làm conversation list
+  const conversations = [...friends].sort((a, b) => {
+    if (a.lastMessage && b.lastMessage) {
+      return (
+        new Date(b.lastMessage.createdAt).getTime() -
+        new Date(a.lastMessage.createdAt).getTime()
+      );
+    }
+    if (a.lastMessage) return -1;
+    if (b.lastMessage) return 1;
+    return 0;
+  });
+
+  function formatTime(dateString: string) {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    const now = new Date();
+    if (
+      date.getDate() === now.getDate() &&
+      date.getMonth() === now.getMonth() &&
+      date.getFullYear() === now.getFullYear()
+    ) {
+      return date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+    return `${date.getDate()}/${date.getMonth() + 1}`;
+  }
+
+  const renderConversationItem = ({ item }: { item: any }) => {
     const isOnline = onlineFriends.includes(item.id);
     return (
       <TouchableOpacity
@@ -340,18 +391,31 @@ const MessageScreen: React.FC = () => {
         </View>
         <View style={styles.messageContent}>
           <Text style={styles.messageName}>{item.name}</Text>
+          <Text style={styles.messageText} numberOfLines={1}>
+            {item.lastMessage?.content || "Chưa có tin nhắn"}
+          </Text>
+        </View>
+        <View style={styles.messageMeta}>
+          <Text style={styles.messageTime}>
+            {item.lastMessage ? formatTime(item.lastMessage.createdAt) : ""}
+          </Text>
+          {item.unreadCount > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadText}>{item.unreadCount}</Text>
+            </View>
+          )}
         </View>
       </TouchableOpacity>
     );
   };
 
   const renderPendingItem = ({ item }: { item: any }) => {
-    console.log(
-      "pending.avatar:",
-      item.user?.avatar,
-      "image:",
-      item.user?.image
-    );
+    // console.log(
+    //   "pending.avatar:",
+    //   item.user?.avatar,
+    //   "image:",
+    //   item.user?.image
+    // );
     return (
       <View style={styles.messageItem}>
         <Image
@@ -385,7 +449,7 @@ const MessageScreen: React.FC = () => {
   };
 
   const renderSearchItem = ({ item }: { item: any }) => {
-    console.log("search.avatar:", item.avatar, "image:", item.image);
+    // console.log("search.avatar:", item.avatar, "image:", item.image);
     const isSent = sentRequests.includes(item.id);
     const isFriend = friends.some((f) => f.id === item.id);
     return (
@@ -594,8 +658,8 @@ const MessageScreen: React.FC = () => {
           </Text>
         ) : (
           <FlatList
-            data={filteredFriends}
-            renderItem={renderFriendItem}
+            data={conversations}
+            renderItem={renderConversationItem}
             keyExtractor={(item) => item.id.toString()}
             contentContainerStyle={styles.messageList}
           />

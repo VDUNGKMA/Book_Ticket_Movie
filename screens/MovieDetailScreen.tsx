@@ -12,6 +12,8 @@ import {
   Modal,
   Alert,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useRoute, useNavigation, RouteProp } from "@react-navigation/native";
@@ -20,6 +22,7 @@ import {
   rateMovie,
   getMovieAverageRating,
   getMovieRatings,
+  getSimilarMovies,
 } from "../api/api";
 import { Movie } from "../types";
 import { BASE_URL } from "../config/config";
@@ -28,6 +31,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { Video, ResizeMode, AVPlaybackStatus } from "expo-av";
 import { useUserContext } from "../context/UserContext";
 import { Rating } from "react-native-ratings";
+import MovieComments from "../components/MovieComments";
 
 // Định nghĩa interface cho dữ liệu diễn viên
 interface CastMember {
@@ -51,6 +55,8 @@ const MovieDetailScreen: React.FC = () => {
   const [userComment, setUserComment] = useState<string>("");
   const [ratings, setRatings] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [similarMovies, setSimilarMovies] = useState<Movie[]>([]);
+  const [loadingSimilar, setLoadingSimilar] = useState(false);
 
   useEffect(() => {
     const fetchMovieDetails = async () => {
@@ -98,6 +104,32 @@ const MovieDetailScreen: React.FC = () => {
     fetchMovieDetails();
     fetchMovieAverageRating();
     fetchMovieRatings();
+    // Lấy phim tương tự
+    const fetchSimilar = async () => {
+      if (!movieId) return;
+      setLoadingSimilar(true);
+      try {
+        const data = await getSimilarMovies(movieId);
+        // Log dữ liệu để debug
+        console.log("Similar movies raw data:", data);
+        let movies: Movie[] = [];
+        if (Array.isArray(data)) {
+          movies = data
+            .map((item: any) => item && item.movie)
+            .filter((m: any) => m && m.id);
+        } else if (Array.isArray(data?.data)) {
+          movies = data.data
+            .map((item: any) => item && item.movie)
+            .filter((m: any) => m && m.id);
+        }
+        setSimilarMovies(movies);
+      } catch (e) {
+        setSimilarMovies([]);
+      } finally {
+        setLoadingSimilar(false);
+      }
+    };
+    fetchSimilar();
   }, [movieId, user]);
 
   const fetchMovieAverageRating = async () => {
@@ -114,9 +146,22 @@ const MovieDetailScreen: React.FC = () => {
   const fetchMovieRatings = async () => {
     try {
       const res = await getMovieRatings(movieId);
-      setRatings(Array.isArray(res) ? res : res.ratings || []);
+      const ratingsArr = Array.isArray(res) ? res : res.ratings || [];
+      setRatings(ratingsArr);
+      // Tìm rating của user hiện tại
+      if (user) {
+        const myRating = ratingsArr.find(
+          (r: any) => r.user_id === user.id || (r.user && r.user.id === user.id)
+        );
+        if (myRating) {
+          setUserRating(myRating.rating);
+        } else {
+          setUserRating(0);
+        }
+      }
     } catch (e) {
       setRatings([]);
+      setUserRating(0);
     }
   };
 
@@ -207,266 +252,285 @@ const MovieDetailScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleGoBack}>
-          <Text>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Chi tiết phim</Text>
-        <TouchableOpacity>
-          <Text>
-            <Ionicons name="ellipsis-vertical" size={24} color="#fff" />
-          </Text>
-        </TouchableOpacity>
-      </View>
-      <ScrollView style={styles.content}>
-        <View style={styles.posterContainer}>
-          <Image
-            source={{
-              uri: movie.poster_url?.startsWith("http")
-                ? movie.poster_url
-                : `${BASE_URL}${movie.poster_url}`,
-            }}
-            style={styles.posterImage}
-            defaultSource={require("../assets/icon.png")}
-          />
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={80}
+    >
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleGoBack}>
+            <Text>
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Chi tiết phim</Text>
+          <TouchableOpacity>
+            <Text>
+              <Ionicons name="ellipsis-vertical" size={24} color="#fff" />
+            </Text>
+          </TouchableOpacity>
         </View>
-        <View style={styles.infoContainer}>
-          <Text style={styles.title}>
-            <Text>🎬</Text> {movie.title || "Chưa có tiêu đề"}
-          </Text>
-          <View style={styles.detailsRow}>
-            <Text style={styles.detailText}>
-              {movie.director
-                ? `Đạo diễn: ${movie.director}`
-                : "Chưa có thông tin đạo diễn"}
-            </Text>
-            <View style={styles.ratingContainer}>
-              <Text>
-                <Ionicons name="star" size={16} color="#FFD700" />
-              </Text>
-              <Text style={styles.ratingText}>
-                {movie.rating ? movie.rating.toFixed(1) : "N/A"}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.detailsRow}>
-            <Text style={styles.detailText}>
-              {movie.genres && movie.genres.length > 0
-                ? movie.genres.map((g) => g.name).join(", ")
-                : "Chưa phân loại"}
-            </Text>
-            <Text style={styles.detailText}>
-              <Text>⏰</Text> {movie.duration || 0} phút
-            </Text>
-          </View>
-          {(movie.age_restriction ?? 0) > 0 && (
-            <View style={styles.ageRestriction}>
-              <Text style={styles.ageRestrictionText}>
-                {movie.age_restriction}+
-              </Text>
-            </View>
-          )}
-          <Text style={styles.release}>
-            Ngày phát hành: <Text>📅</Text>{" "}
-            {movie.release_date
-              ? new Date(movie.release_date).toLocaleDateString()
-              : "Chưa có ngày phát hành"}
-          </Text>
-          <Text style={styles.synopsis}>
-            {movie.description || "Chưa có mô tả"}
-          </Text>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              marginVertical: 8,
-            }}
-          >
-            <Rating
-              readonly
-              startingValue={averageRating || 0}
-              imageSize={20}
-              style={{ marginRight: 8 }}
-            />
-            <Text
-              style={{ color: "#FFD700", fontWeight: "bold", marginRight: 8 }}
-            >
-              {averageRating ? averageRating.toFixed(1) : "N/A"}
-            </Text>
-            <Text style={{ color: "#888" }}>({ratingCount} đánh giá)</Text>
-          </View>
-        </View>
-        {movie.cast && movie.cast.trim() !== "" && (
-          <View style={styles.castSection}>
-            <Text style={styles.castTitle}>Diễn viên</Text>
-            <FlatList
-              data={castList}
-              renderItem={renderCastItem}
-              keyExtractor={(item) => item.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
+        <ScrollView style={styles.content}>
+          <View style={styles.posterContainer}>
+            <Image
+              source={{
+                uri: movie.poster_url?.startsWith("http")
+                  ? movie.poster_url
+                  : `${BASE_URL}${movie.poster_url}`,
+              }}
+              style={styles.posterImage}
+              defaultSource={require("../assets/icon.png")}
             />
           </View>
-        )}
-        {movie.trailer_url && movie.trailer_url.trim() !== "" && (
-          <View style={styles.trailerSection}>
-            <Text style={styles.trailerTitle}>
-              <Text>🎥</Text> Trailer
+          <View style={styles.infoContainer}>
+            <Text style={styles.title}>
+              <Text>🎬</Text> {movie.title || "Chưa có tiêu đề"}
             </Text>
-            {!isTrailerPlaying ? (
-              <TouchableOpacity
-                style={styles.trailerThumbnail}
-                onPress={() => setIsTrailerPlaying(true)}
-              >
-                <Image
-                  source={{
-                    uri: movie.poster_url?.startsWith("http")
-                      ? movie.poster_url
-                      : `${BASE_URL}${movie.poster_url}`,
-                  }}
-                  style={styles.trailerThumbnailImage}
-                  defaultSource={require("../assets/icon.png")}
-                />
-                <View style={styles.playIconOverlay}>
-                  <Text>
-                    <Ionicons name="play-circle" size={64} color="white" />
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ) : (
-              <Video
-                ref={videoRef}
-                source={{
-                  uri: movie.trailer_url?.startsWith("http")
-                    ? movie.trailer_url
-                    : `${BASE_URL}${movie.trailer_url}`,
-                }}
-                style={styles.trailerVideo}
-                useNativeControls
-                resizeMode={ResizeMode.CONTAIN}
-                isLooping={false}
-                onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
-                  if (!status.isLoaded) {
-                    if ("error" in status) {
-                      console.error("Playback Error:", status.error);
-                      setIsTrailerPlaying(false);
-                    }
-                  } else if (status.didJustFinish === true) {
-                    setIsTrailerPlaying(false);
-                  }
-                }}
-              />
+            <View style={styles.detailsRow}>
+              <Text style={styles.detailText}>
+                {movie.director
+                  ? `Đạo diễn: ${movie.director}`
+                  : "Chưa có thông tin đạo diễn"}
+              </Text>
+              <View style={styles.ratingContainer}>
+                <Text>
+                  <Ionicons name="star" size={16} color="#FFD700" />
+                </Text>
+                <Text style={styles.ratingText}>
+                  {movie.rating ? movie.rating.toFixed(1) : "N/A"}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.detailsRow}>
+              <Text style={styles.detailText}>
+                {movie.genres && movie.genres.length > 0
+                  ? movie.genres.map((g) => g.name).join(", ")
+                  : "Chưa phân loại"}
+              </Text>
+              <Text style={styles.detailText}>
+                <Text>⏰</Text> {movie.duration || 0} phút
+              </Text>
+            </View>
+            {(movie.age_restriction ?? 0) > 0 && (
+              <View style={styles.ageRestriction}>
+                <Text style={styles.ageRestrictionText}>
+                  {movie.age_restriction}+
+                </Text>
+              </View>
             )}
-          </View>
-        )}
-        <TouchableOpacity
-          style={styles.bookingButton}
-          onPress={handleBookingNow}
-        >
-          <Text style={styles.bookingText}>
-            <Text>📅</Text> Đặt vé ngay
-          </Text>
-        </TouchableOpacity>
-        {/* Đánh giá của tôi */}
-        {user && (
-          <View
-            style={{
-              marginVertical: 16,
-              backgroundColor: "#fff",
-              borderRadius: 8,
-              padding: 12,
-            }}
-          >
-            <Text style={{ fontWeight: "bold", marginBottom: 4 }}>
-              Đánh giá của bạn
+            <Text style={styles.release}>
+              Ngày phát hành: <Text>📅</Text>{" "}
+              {movie.release_date
+                ? new Date(movie.release_date).toLocaleDateString()
+                : "Chưa có ngày phát hành"}
             </Text>
-            <Rating
-              startingValue={userRating}
-              imageSize={32}
-              onFinishRating={setUserRating}
-              style={{ marginBottom: 8 }}
-            />
+            <Text style={styles.synopsis}>
+              {movie.description || "Chưa có mô tả"}
+            </Text>
             <View
               style={{
-                borderWidth: 1,
-                borderColor: "#eee",
-                borderRadius: 6,
-                marginBottom: 8,
+                flexDirection: "row",
+                alignItems: "center",
+                marginVertical: 8,
+              }}
+            >
+              <Rating
+                readonly
+                startingValue={averageRating || 0}
+                imageSize={20}
+                style={{ marginRight: 8 }}
+              />
+              <Text
+                style={{ color: "#FFD700", fontWeight: "bold", marginRight: 8 }}
+              >
+                {averageRating ? averageRating.toFixed(1) : "N/A"}
+              </Text>
+              <Text style={{ color: "#888" }}>({ratingCount} đánh giá)</Text>
+            </View>
+          </View>
+          {movie.cast && movie.cast.trim() !== "" && (
+            <View style={styles.castSection}>
+              <Text style={styles.castTitle}>Diễn viên</Text>
+              <FlatList
+                data={castList}
+                renderItem={renderCastItem}
+                keyExtractor={(item) => item.id}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+              />
+            </View>
+          )}
+          {movie.trailer_url && movie.trailer_url.trim() !== "" && (
+            <View style={styles.trailerSection}>
+              <Text style={styles.trailerTitle}>
+                <Text>🎥</Text> Trailer
+              </Text>
+              {!isTrailerPlaying ? (
+                <TouchableOpacity
+                  style={styles.trailerThumbnail}
+                  onPress={() => setIsTrailerPlaying(true)}
+                >
+                  <Image
+                    source={{
+                      uri: movie.poster_url?.startsWith("http")
+                        ? movie.poster_url
+                        : `${BASE_URL}${movie.poster_url}`,
+                    }}
+                    style={styles.trailerThumbnailImage}
+                    defaultSource={require("../assets/icon.png")}
+                  />
+                  <View style={styles.playIconOverlay}>
+                    <Text>
+                      <Ionicons name="play-circle" size={64} color="white" />
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ) : (
+                <Video
+                  ref={videoRef}
+                  source={{
+                    uri: movie.trailer_url?.startsWith("http")
+                      ? movie.trailer_url
+                      : `${BASE_URL}${movie.trailer_url}`,
+                  }}
+                  style={styles.trailerVideo}
+                  useNativeControls
+                  resizeMode={ResizeMode.CONTAIN}
+                  isLooping={false}
+                  onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
+                    if (!status.isLoaded) {
+                      if ("error" in status) {
+                        console.error("Playback Error:", status.error);
+                        setIsTrailerPlaying(false);
+                      }
+                    } else if (status.didJustFinish === true) {
+                      setIsTrailerPlaying(false);
+                    }
+                  }}
+                />
+              )}
+            </View>
+          )}
+          <TouchableOpacity
+            style={styles.bookingButton}
+            onPress={handleBookingNow}
+          >
+            <Text style={styles.bookingText}>
+              <Text>📅</Text> Đặt vé ngay
+            </Text>
+          </TouchableOpacity>
+          {/* Đánh giá của tôi */}
+          {user && (
+            <View
+              style={{
+                marginVertical: 16,
+                backgroundColor: "#fff",
+                borderRadius: 8,
+                padding: 16,
+                alignItems: "center",
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.08,
+                shadowRadius: 4,
+                elevation: 2,
               }}
             >
               <Text
-                style={{ minHeight: 40, padding: 8 }}
-                onPress={() => {}} // Để mở bàn phím nếu muốn custom
+                style={{ fontWeight: "bold", marginBottom: 8, fontSize: 16 }}
               >
-                <TextInput
-                  placeholder="Viết cảm nhận... (không bắt buộc)"
-                  value={userComment}
-                  onChangeText={setUserComment}
-                  multiline
-                  style={{ minHeight: 40 }}
-                />
+                Đánh giá của bạn
               </Text>
-            </View>
-            <TouchableOpacity
-              style={{
-                backgroundColor: "#FF4444",
-                borderRadius: 6,
-                padding: 10,
-                alignItems: "center",
-              }}
-              onPress={handleSubmitRating}
-              disabled={submitting}
-            >
-              <Text style={{ color: "#fff", fontWeight: "bold" }}>
-                {submitting ? "Đang gửi..." : "Gửi đánh giá"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        {/* Danh sách đánh giá */}
-        <View style={{ marginVertical: 8 }}>
-          <Text style={{ fontWeight: "bold", marginBottom: 8 }}>
-            Đánh giá của người xem
-          </Text>
-          {ratings.length === 0 ? (
-            <Text style={{ color: "#888" }}>Chưa có đánh giá nào</Text>
-          ) : (
-            ratings.map((r, idx) => (
-              <View
-                key={idx}
+              <Rating
+                startingValue={userRating}
+                imageSize={36}
+                onFinishRating={setUserRating}
+                style={{ marginBottom: 16 }}
+              />
+              <TouchableOpacity
                 style={{
-                  marginBottom: 12,
-                  backgroundColor: "#f8f8f8",
-                  borderRadius: 6,
-                  padding: 8,
+                  backgroundColor: "#FF4444",
+                  borderRadius: 8,
+                  paddingVertical: 12,
+                  paddingHorizontal: 32,
+                  alignItems: "center",
+                  marginTop: 4,
+                }}
+                onPress={handleSubmitRating}
+                disabled={submitting}
+              >
+                <Text
+                  style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}
+                >
+                  Gửi đánh giá
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {/* Gợi ý phim tương tự */}
+          {similarMovies.length > 0 && (
+            <View style={{ marginVertical: 16 }}>
+              <Text
+                style={{
+                  color: "#fff",
+                  fontSize: 20,
+                  fontWeight: "bold",
+                  marginLeft: 15,
+                  marginBottom: 8,
                 }}
               >
-                <View style={{ flexDirection: "row", alignItems: "center" }}>
-                  <Rating
-                    readonly
-                    startingValue={r.rating}
-                    imageSize={16}
-                    style={{ marginRight: 6 }}
-                  />
-                  <Text style={{ fontWeight: "bold", marginRight: 8 }}>
-                    {r.user?.name || "Ẩn danh"}
-                  </Text>
-                  <Text style={{ color: "#aaa", fontSize: 12 }}>
-                    {new Date(r.createdAt).toLocaleString()}
-                  </Text>
-                </View>
-                {r.comment ? (
-                  <Text style={{ marginTop: 4 }}>{r.comment}</Text>
-                ) : null}
-              </View>
-            ))
+                Phim tương tự
+              </Text>
+              {loadingSimilar ? (
+                <ActivityIndicator size="small" color="#FF4444" />
+              ) : (
+                <FlatList
+                  data={similarMovies
+                    .filter((item: any) => !!item.id)
+                    .slice(0, 10)}
+                  renderItem={({ item }: { item: Movie }) => (
+                    <TouchableOpacity
+                      style={{ width: 120, marginHorizontal: 8 }}
+                      onPress={() =>
+                        navigation.push("MovieDetail", { movieId: item.id })
+                      }
+                    >
+                      <Image
+                        source={{
+                          uri: item.poster_url?.startsWith("http")
+                            ? item.poster_url
+                            : `${BASE_URL}${item.poster_url}`,
+                        }}
+                        style={{
+                          width: 120,
+                          height: 180,
+                          borderRadius: 10,
+                          backgroundColor: "#222",
+                        }}
+                      />
+                      <Text
+                        style={{ color: "#fff", fontSize: 13, marginTop: 5 }}
+                        numberOfLines={2}
+                      >
+                        {item.title}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  keyExtractor={(item: any) => item.id.toString()}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ paddingHorizontal: 15 }}
+                />
+              )}
+            </View>
           )}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+          {/* Phần bình luận tách biệt */}
+          <View style={{ marginTop: 16, marginBottom: 32 }}>
+            <MovieComments movieId={movie.id} />
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 };
 

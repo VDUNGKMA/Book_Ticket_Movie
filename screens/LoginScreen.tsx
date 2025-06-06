@@ -99,18 +99,6 @@ const LoginScreen: React.FC = () => {
             screen,
             params,
           };
-
-          // Reset về tab Home
-          navigation.reset({
-            index: 0,
-            routes: [{ name: "Home" }],
-          });
-        } else {
-          // Nếu không có chuyển hướng, điều hướng đến màn hình Home mặc định
-          navigation.reset({
-            index: 0,
-            routes: [{ name: "Home" }],
-          });
         }
       } else {
         Alert.alert("Lỗi", "Không lấy được thông tin người dùng");

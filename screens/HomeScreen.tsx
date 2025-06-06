@@ -19,10 +19,20 @@ import {
   getUpcomingMovies,
   getNowPlayingMovies,
   getTopRatedMovies,
+  getPersonalRecommendationsByToken,
+  getRecommendationsByTime,
+  getRecommendationsByLocation,
+  getRecommendationsByWeather,
+  getMovieDetail,
+  getRecommendedMoviesWithScreenings,
+  MovieWithScreenings,
 } from "../api/api";
 import { useUserContext } from "../context/UserContext";
 import { Movie } from "../types";
 import { BASE_URL } from "../config/config";
+import IncomingCallModal from "../components/IncomingCallModal";
+import * as SecureStore from "expo-secure-store";
+import * as Location from "expo-location";
 
 // Thêm lại khai báo global để tránh lỗi
 declare global {
@@ -40,9 +50,14 @@ const HomeScreen: React.FC = () => {
   const [upcomingMovies, setUpcomingMovies] = useState<Movie[]>([]);
   const [nowPlayingMovies, setNowPlayingMovies] = useState<Movie[]>([]);
   const [topRatedMovies, setTopRatedMovies] = useState<Movie[]>([]);
+  const [personalMovies, setPersonalMovies] = useState<Movie[]>([]);
+  const [recommendedMovies, setRecommendedMovies] = useState<
+    MovieWithScreenings[]
+  >([]);
   const [loading, setLoading] = useState(true);
+  const [loadingPersonal, setLoadingPersonal] = useState(false);
+  const [loadingRecommended, setLoadingRecommended] = useState(false);
   const { user } = useUserContext();
- 
 
   useEffect(() => {
     const fetchMovies = async () => {
@@ -67,6 +82,36 @@ const HomeScreen: React.FC = () => {
 
     fetchMovies();
 
+    // Gợi ý cá nhân hóa
+    const fetchPersonalRecommendations = async () => {
+      try {
+        setLoadingPersonal(true);
+        const token = await SecureStore.getItemAsync("access_token");
+        if (user && token) {
+          const data = await getPersonalRecommendationsByToken(token);
+          let movies: Movie[] = [];
+          if (Array.isArray(data)) {
+            movies = data
+              .map((item: any) => item.movie)
+              .filter((m: any) => !!m?.id);
+          } else if (Array.isArray(data?.data)) {
+            movies = data.data
+              .map((item: any) => item.movie)
+              .filter((m: any) => !!m?.id);
+          }
+          setPersonalMovies(movies);
+        } else {
+          setPersonalMovies([]);
+        }
+      } catch (error) {
+        setPersonalMovies([]);
+        console.error("Error fetching personal recommendations:", error);
+      } finally {
+        setLoadingPersonal(false);
+      }
+    };
+    if (user) fetchPersonalRecommendations();
+
     // Kiểm tra và xử lý chuyển hướng sau đăng nhập
     if (global.redirectAfterLogin) {
       const { screen, params } = global.redirectAfterLogin;
@@ -78,6 +123,44 @@ const HomeScreen: React.FC = () => {
         global.redirectAfterLogin = null;
       }, 500);
     }
+
+    // Gợi ý phim kèm suất chiếu phù hợp nhất
+    const fetchRecommendedMovies = async () => {
+      try {
+        setLoadingRecommended(true);
+        // Lấy vị trí hiện tại (nếu muốn ưu tiên rạp gần nhất)
+        let lat, lng;
+        try {
+          let { status } = await Location.requestForegroundPermissionsAsync();
+          if (status === "granted") {
+            const location = await Location.getCurrentPositionAsync({});
+            lat = location.coords.latitude;
+            lng = location.coords.longitude;
+          }
+        } catch (e) {
+          // Nếu không lấy được vị trí, bỏ qua
+        }
+        if (user) {
+          const data = await getRecommendedMoviesWithScreenings(
+            user.id,
+            lat,
+            lng
+          );
+          setRecommendedMovies(data);
+        } else {
+          setRecommendedMovies([]);
+        }
+      } catch (error) {
+        setRecommendedMovies([]);
+        console.error(
+          "Error fetching recommended movies with screenings:",
+          error
+        );
+      } finally {
+        setLoadingRecommended(false);
+      }
+    };
+    if (user) fetchRecommendedMovies();
   }, [navigation, user]);
 
   const handleMoviePress = async (movie: Movie) => {
@@ -121,120 +204,253 @@ const HomeScreen: React.FC = () => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView>
-        <View style={styles.header}>
-          <Text style={styles.logo}>MyBroFlix</Text>
-          {user ? (
-            user.image ? (
-              <Image
-                source={{
-                  uri: user.image.startsWith("http")
-                    ? user.image
-                    : `${BASE_URL}/${user.image.replace(/\\/g, "/")}`,
-                }}
-                style={styles.avatar}
-              />
-            ) : (
-              <Ionicons
-                name="person-circle"
-                size={40}
-                color="#fff"
-                style={{ marginLeft: 10 }}
-              />
-            )
-          ) : null}
-        </View>
-
-        {/* Phim Phổ Biến */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Phim Phổ Biến</Text>
-            <TouchableOpacity
-              onPress={() =>
-                navigation.navigate("MovieList", { type: "popular" })
-              }
-            >
-              <Text style={styles.seeAllText}>Xem tất cả</Text>
-            </TouchableOpacity>
+    <View style={{ flex: 1 }}>
+      <SafeAreaView style={styles.container}>
+        <ScrollView>
+          <View style={styles.header}>
+            <Text style={styles.logo}>MyBroFlix</Text>
+            {user ? (
+              user.image ? (
+                <Image
+                  source={{
+                    uri: user.image.startsWith("http")
+                      ? user.image
+                      : `${BASE_URL}/${user.image.replace(/\\/g, "/")}`,
+                  }}
+                  style={styles.avatar}
+                />
+              ) : (
+                <Ionicons
+                  name="person-circle"
+                  size={40}
+                  color="#fff"
+                  style={{ marginLeft: 10 }}
+                />
+              )
+            ) : null}
           </View>
-          <FlatList
-            data={popularMovies.slice(0, 5)}
-            renderItem={renderMovieCard}
-            keyExtractor={(item) => item.id.toString()}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.movieList}
-          />
-        </View>
 
-        {/* Phim Sắp Chiếu */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Phim Sắp Chiếu</Text>
-            <TouchableOpacity
-              onPress={() =>
-                navigation.navigate("MovieList", { type: "upcoming" })
-              }
-            >
-              <Text style={styles.seeAllText}>Xem tất cả</Text>
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            data={upcomingMovies.slice(0, 5)}
-            renderItem={renderMovieCard}
-            keyExtractor={(item) => item.id.toString()}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.movieList}
-          />
-        </View>
+          {/* Nút Gợi ý nhóm bạn bè luôn hiển thị */}
+          <TouchableOpacity
+            style={{
+              backgroundColor: "#007bff",
+              padding: 12,
+              borderRadius: 8,
+              margin: 16,
+              alignItems: "center",
+            }}
+            onPress={() => navigation.navigate("GroupRecommendation" as never)}
+          >
+            <Text style={{ color: "#fff", fontWeight: "bold" }}>
+              Gợi ý nhóm bạn bè
+            </Text>
+          </TouchableOpacity>
 
-        {/* Phim Đang Chiếu */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Phim Đang Chiếu</Text>
-            <TouchableOpacity
-              onPress={() =>
-                navigation.navigate("MovieList", { type: "nowPlaying" })
-              }
-            >
-              <Text style={styles.seeAllText}>Xem tất cả</Text>
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            data={nowPlayingMovies.slice(0, 5)}
-            renderItem={renderMovieCard}
-            keyExtractor={(item) => item.id.toString()}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.movieList}
-          />
-        </View>
+          {/* Gợi ý cá nhân hóa */}
+          {user && personalMovies.length > 0 && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Dành riêng cho bạn</Text>
+              </View>
+              {loadingPersonal ? (
+                <ActivityIndicator size="small" color="#FF4444" />
+              ) : (
+                <FlatList
+                  data={personalMovies.filter((item) => !!item.id).slice(0, 5)}
+                  renderItem={renderMovieCard}
+                  keyExtractor={(item) => item.id.toString()}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.movieList}
+                />
+              )}
+            </View>
+          )}
 
-        {/* Phim Đánh Giá Cao */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Phim Đánh Giá Cao</Text>
-            <TouchableOpacity
-              onPress={() =>
-                navigation.navigate("MovieList", { type: "topRated" })
-              }
-            >
-              <Text style={styles.seeAllText}>Xem tất cả</Text>
-            </TouchableOpacity>
+          {/* Gợi ý phim kèm suất chiếu phù hợp nhất */}
+          {user && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>
+                  Phim & Suất chiếu phù hợp nhất
+                </Text>
+              </View>
+              {loadingRecommended ? (
+                <ActivityIndicator size="small" color="#FF4444" />
+              ) : recommendedMovies.length === 0 ? (
+                <Text style={{ color: "#888", marginLeft: 10 }}>
+                  Không có phim phù hợp.
+                </Text>
+              ) : (
+                recommendedMovies.map((rec) => (
+                  <View key={rec.movie_id} style={{ marginBottom: 16 }}>
+                    <TouchableOpacity
+                      onPress={() => handleMoviePress(rec.movie)}
+                    >
+                      <View
+                        style={{ flexDirection: "row", alignItems: "center" }}
+                      >
+                        <Image
+                          source={{
+                            uri: rec.movie.poster_url?.startsWith("http")
+                              ? rec.movie.poster_url
+                              : `${BASE_URL}${rec.movie.poster_url}`,
+                          }}
+                          style={{
+                            width: 80,
+                            height: 120,
+                            borderRadius: 8,
+                            marginRight: 12,
+                          }}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+                            {rec.movie.title}
+                          </Text>
+                          <Text style={{ color: "#888" }}>
+                            {rec.movie.duration} phút
+                          </Text>
+                          <Text style={{ color: "#888" }}>
+                            {rec.movie.genres
+                              ?.map((g: any) => g.name)
+                              .join(", ")}
+                          </Text>
+                          <Text style={{ color: "#FF4444", marginTop: 4 }}>
+                            {rec.screenings.length} suất chiếu phù hợp
+                          </Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                    {/* Hiển thị các suất chiếu */}
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={{ marginTop: 8 }}
+                    >
+                      {rec.screenings.map((screening) => (
+                        <View
+                          key={screening.id}
+                          style={{
+                            backgroundColor: "#eee",
+                            borderRadius: 6,
+                            padding: 8,
+                            marginRight: 8,
+                            minWidth: 120,
+                          }}
+                        >
+                          <Text style={{ fontWeight: "bold" }}>
+                            {new Date(screening.start_time).toLocaleString(
+                              "vi-VN"
+                            )}
+                          </Text>
+                          <Text style={{ color: "#444" }}>
+                            {screening.theaterRoom?.theater?.name || ""}
+                          </Text>
+                          <Text style={{ color: "#444" }}>
+                            Phòng: {screening.theaterRoom?.room_name || ""}
+                          </Text>
+                          <Text style={{ color: "#444" }}>
+                            Giá: {screening.price}đ
+                          </Text>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  </View>
+                ))
+              )}
+            </View>
+          )}
+
+          {/* Phim Phổ Biến */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Phim Phổ Biến</Text>
+              <TouchableOpacity
+                onPress={() =>
+                  navigation.navigate("MovieList", { type: "popular" })
+                }
+              >
+                <Text style={styles.seeAllText}>Xem tất cả</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={popularMovies.filter((item) => !!item.id).slice(0, 5)}
+              renderItem={renderMovieCard}
+              keyExtractor={(item) => item.id.toString()}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.movieList}
+            />
           </View>
-          <FlatList
-            data={topRatedMovies.slice(0, 5)}
-            renderItem={renderMovieCard}
-            keyExtractor={(item) => item.id.toString()}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.movieList}
-          />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+
+          {/* Phim Sắp Chiếu */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Phim Sắp Chiếu</Text>
+              <TouchableOpacity
+                onPress={() =>
+                  navigation.navigate("MovieList", { type: "upcoming" })
+                }
+              >
+                <Text style={styles.seeAllText}>Xem tất cả</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={upcomingMovies.filter((item) => !!item.id).slice(0, 5)}
+              renderItem={renderMovieCard}
+              keyExtractor={(item) => item.id.toString()}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.movieList}
+            />
+          </View>
+
+          {/* Phim Đang Chiếu */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Phim Đang Chiếu</Text>
+              <TouchableOpacity
+                onPress={() =>
+                  navigation.navigate("MovieList", { type: "nowPlaying" })
+                }
+              >
+                <Text style={styles.seeAllText}>Xem tất cả</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={nowPlayingMovies.filter((item) => !!item.id).slice(0, 5)}
+              renderItem={renderMovieCard}
+              keyExtractor={(item) => item.id.toString()}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.movieList}
+            />
+          </View>
+
+          {/* Phim Đánh Giá Cao */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Phim Đánh Giá Cao</Text>
+              <TouchableOpacity
+                onPress={() =>
+                  navigation.navigate("MovieList", { type: "topRated" })
+                }
+              >
+                <Text style={styles.seeAllText}>Xem tất cả</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={topRatedMovies.filter((item) => !!item.id).slice(0, 5)}
+              renderItem={renderMovieCard}
+              keyExtractor={(item) => item.id.toString()}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.movieList}
+            />
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 };
 

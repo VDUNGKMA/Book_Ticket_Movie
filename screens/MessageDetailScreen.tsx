@@ -147,7 +147,12 @@ const MessageDetailScreen: React.FC = () => {
           </View>
           <TouchableOpacity
             onPress={() =>
-              navigation.navigate("VideoCallScreen", { friendId, name, avatar })
+              navigation.navigate("VideoCallScreen", {
+                friendId,
+                name,
+                avatar,
+                isCallerFlag: true,
+              })
             }
           >
             <Ionicons name="call" size={24} color="#fff" />
@@ -161,17 +166,17 @@ const MessageDetailScreen: React.FC = () => {
           keyExtractor={(msg, index) => msg.id || String(index)}
           renderItem={({ item: msg, index }) => {
             const isMe = Number(msg.senderId) === Number(user?.id);
-            console.log("msg.avatar:", msg.avatar);
+            // console.log("msg.avatar:", msg.avatar);
             let avatarUrl = isMe
               ? user && (user as any).avatar
                 ? (user as any).avatar
-                : ""
+                : null
               : msg.avatar
               ? msg.avatar.startsWith("http")
                 ? msg.avatar
                 : `${BASE_URL}/${msg.avatar.replace(/\\/g, "/")}`
-              : avatar;
-            console.log("avatarUrl used:", avatarUrl);
+              : avatar || null;
+            // console.log("avatarUrl used:", avatarUrl);
             return (
               <View
                 style={{
@@ -182,7 +187,11 @@ const MessageDetailScreen: React.FC = () => {
               >
                 {/* Avatar */}
                 <Image
-                  source={{ uri: avatarUrl }}
+                  source={
+                    avatarUrl
+                      ? { uri: avatarUrl }
+                      : require("../assets/default-avatar.png")
+                  }
                   style={{
                     width: 28,
                     height: 28,
@@ -217,6 +226,53 @@ const MessageDetailScreen: React.FC = () => {
                       />
                     )}
                     <Text style={styles.messageText}>{msg.content}</Text>
+                    {/* Hiển thị thông tin phim, suất chiếu, phòng chiếu nếu là invite */}
+                    {(msg.type === "invite" ||
+                      msg.movie_title ||
+                      msg.movie_poster) && (
+                      <View style={{ marginTop: 8, alignItems: "flex-start" }}>
+                        {msg.movie_poster && (
+                          <Image
+                            source={{
+                              uri: msg.movie_poster.startsWith("http")
+                                ? msg.movie_poster
+                                : `${BASE_URL}${msg.movie_poster}`,
+                            }}
+                            style={{
+                              width: 80,
+                              height: 120,
+                              borderRadius: 8,
+                              marginBottom: 4,
+                            }}
+                          />
+                        )}
+                        {msg.movie_title && (
+                          <Text
+                            style={{ color: "#FFD700", fontWeight: "bold" }}
+                          >
+                            {msg.movie_title}
+                          </Text>
+                        )}
+                        {msg.theater_name && (
+                          <Text style={{ color: "#fff" }}>
+                            Rạp: {msg.theater_name}
+                          </Text>
+                        )}
+                        {msg.screening_time && (
+                          <Text style={{ color: "#fff" }}>
+                            Suất chiếu:{" "}
+                            {new Date(msg.screening_time).toLocaleString(
+                              "vi-VN"
+                            )}
+                          </Text>
+                        )}
+                        {msg.room_name && (
+                          <Text style={{ color: "#fff" }}>
+                            Phòng chiếu: {msg.room_name}
+                          </Text>
+                        )}
+                      </View>
+                    )}
                     <Text style={styles.messageTime}>{msg.createdAt}</Text>
                   </View>
                 </TouchableOpacity>

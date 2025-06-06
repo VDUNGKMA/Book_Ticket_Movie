@@ -86,40 +86,51 @@ const TicketDetailScreen: React.FC = () => {
   const date = ticket.screening?.start_time
     ? new Date(ticket.screening.start_time).toLocaleDateString("vi-VN")
     : "";
-  const ticketCount = ticket.ticketSeats?.length || 0;
-  const seats =
-    ticket.ticketSeats
-      ?.map((s: any) => s.seat?.seat_row + s.seat?.seat_number)
-      .join(", ") || "";
+  const ticketCount = Array.isArray(ticket.ticketSeats)
+    ? ticket.ticketSeats.length
+    : 0;
+  const seats = Array.isArray(ticket.ticketSeats)
+    ? ticket.ticketSeats
+        .map((s: any) =>
+          s.seat ? (s.seat.seat_row || "") + (s.seat.seat_number || "") : ""
+        )
+        .join(", ")
+    : "";
   const statusCode = ticket.status || "active";
   const price = ticket.total_price || 0;
   const room_name = ticket.screening?.theaterRoom?.room_name || "";
-  const foodDrinks = (ticket.foodDrinks || []).map((item: any) => ({
-    id: item.foodDrink?.id,
-    name: item.foodDrink?.name,
-    quantity: item.quantity,
-    unitPrice: Number(item.unit_price),
-    totalPrice: Number(item.total_price),
-    status: item.status,
-  }));
+  const foodDrinks = Array.isArray(ticket.foodDrinks)
+    ? ticket.foodDrinks.map((item: any) => ({
+        id: item.foodDrink?.id,
+        name: item.foodDrink?.name || "N/A",
+        quantity: item.quantity,
+        unitPrice: Number(item.unit_price),
+        totalPrice: Number(item.total_price),
+        status: item.status,
+      }))
+    : [];
 
   // Giá suất chiếu (giá mặc định của screening)
   const screeningPrice = Number(ticket.screening?.price) || 0;
 
   // Tổng giá ghế (cộng tất cả price của ticketSeats)
-  const seatTotal = (ticket.ticketSeats || []).reduce(
-    (sum: number, s: any) => sum + (Number(s.price) || 0),
-    0
-  );
+  const seatTotal = Array.isArray(ticket.ticketSeats)
+    ? ticket.ticketSeats.reduce(
+        (sum: number, s: any) => sum + (Number(s.price) || 0),
+        0
+      )
+    : 0;
 
   // Tổng giá vé (suất chiếu + ghế)
   const ticketTotal = screeningPrice + seatTotal;
 
   // Tổng giá đồ ăn
-  const foodTotal = (foodDrinks || []).reduce(
-    (sum: number, item: any) => sum + (Number(item.totalPrice) || 0),
-    0
-  );
+  const foodTotal = Array.isArray(foodDrinks)
+    ? foodDrinks.reduce(
+        (sum: number, item: any) => sum + (Number(item.totalPrice) || 0),
+        0
+      )
+    : 0;
 
   // Tổng cộng
   const grandTotal = ticketTotal + foodTotal;
@@ -208,21 +219,29 @@ const TicketDetailScreen: React.FC = () => {
         </View>
 
         {/* Thông tin đồ ăn nếu có */}
-        {foodDrinks && foodDrinks.length > 0 && (
+        {Array.isArray(foodDrinks) && foodDrinks.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Đồ ăn & Thức uống</Text>
             {foodDrinks.map((item: any, index: number) => (
               <View key={index} style={styles.foodItem}>
                 <View style={styles.foodInfo}>
-                  <Text style={styles.foodName}>{item.name}</Text>
-                  <Text style={styles.foodQuantity}>x{item.quantity}</Text>
+                  <Text style={styles.foodName}>{item.name || "N/A"}</Text>
+                  <Text style={styles.foodQuantity}>x{item.quantity ?? 0}</Text>
                 </View>
                 <View>
                   <Text style={styles.foodPrice}>
-                    Đơn giá: {item.unitPrice.toLocaleString("vi-VN")}đ
+                    Đơn giá:{" "}
+                    {item.unitPrice
+                      ? item.unitPrice.toLocaleString("vi-VN")
+                      : 0}
+                    đ
                   </Text>
                   <Text style={styles.foodPrice}>
-                    Thành tiền: {item.totalPrice.toLocaleString("vi-VN")}đ
+                    Thành tiền:{" "}
+                    {item.totalPrice
+                      ? item.totalPrice.toLocaleString("vi-VN")
+                      : 0}
+                    đ
                   </Text>
                 </View>
               </View>
@@ -260,19 +279,23 @@ const TicketDetailScreen: React.FC = () => {
         </View>
 
         {/* Mã QR code nếu có */}
-        {ticket.qrCode && ticket.qrCode.qr_code && (
-          <View style={styles.barcodeSection}>
-            <TouchableOpacity onPress={() => setQrModalVisible(true)}>
-              <QRCode
-                value={ticket.qrCode.qr_code}
-                size={250}
-                color="black"
-                backgroundColor="white"
-              />
-            </TouchableOpacity>
-            <Text style={styles.barcodeText}>Quét mã này tại quầy soát vé</Text>
-          </View>
-        )}
+        {ticket.qrCode &&
+          ticket.qrCode.qr_code &&
+          typeof ticket.qrCode.qr_code === "string" && (
+            <View style={styles.barcodeSection}>
+              <TouchableOpacity onPress={() => setQrModalVisible(true)}>
+                <QRCode
+                  value={ticket.qrCode.qr_code}
+                  size={250}
+                  color="black"
+                  backgroundColor="white"
+                />
+              </TouchableOpacity>
+              <Text style={styles.barcodeText}>
+                Quét mã này tại quầy soát vé
+              </Text>
+            </View>
+          )}
       </ScrollView>
       {/* Nút Download Ticket PDF */}
       <TouchableOpacity

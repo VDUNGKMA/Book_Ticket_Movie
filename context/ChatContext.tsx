@@ -10,6 +10,8 @@ import { useUserContext } from "./UserContext";
 import { BASE_URL } from "../config/config";
 import * as SecureStore from "expo-secure-store";
 import { View, Text } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Movie, Screening } from "../types";
 
 export interface ChatMessage {
   id: string;
@@ -22,6 +24,8 @@ export interface ChatMessage {
   fileName?: string;
   replyToMessage?: ChatMessage | null;
   avatar?: string;
+  movie?: Movie;
+  screening?: Screening;
 }
 
 interface ChatContextType {
@@ -30,7 +34,8 @@ interface ChatContextType {
   sendMessage: (
     receiverId: number,
     content: string,
-    replyToMessageId?: number
+    replyToMessageId?: number,
+    extraData?: { movie?: Movie; screening?: Screening }
   ) => void;
   fetchHistory: (friendId: number) => void;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
@@ -45,6 +50,19 @@ interface ChatContextType {
   onCallAccept?: (cb: (data: any) => void) => void;
   onCallReject?: (cb: (data: any) => void) => void;
   onSignal?: (cb: (data: any) => void) => void;
+  incomingCall?: IncomingCall | null;
+  acceptIncomingCall?: () => void;
+  rejectIncomingCall?: () => void;
+  setIncomingCall?: React.Dispatch<React.SetStateAction<IncomingCall | null>>;
+  isInCall?: boolean;
+  setIsInCall?: (val: boolean) => Promise<void>;
+}
+
+interface IncomingCall {
+  senderId: number;
+  senderName: string;
+  senderAvatar?: string;
+  type: "audio" | "video";
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -57,6 +75,27 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
   const socketRef = useRef<Socket | null>(null);
   const [onlineFriends, setOnlineFriends] = useState<number[]>([]);
   const [autoTestResult, setAutoTestResult] = useState<string>("");
+  const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
+  const [isInCall, _setIsInCall] = useState<boolean>(false);
+
+  // Hàm setIsInCall lưu cả vào AsyncStorage
+  const setIsInCall = async (val: boolean) => {
+    _setIsInCall(val);
+    try {
+      await AsyncStorage.setItem("isInCall", val ? "1" : "0");
+    } catch {}
+  };
+
+  // Khôi phục isInCall khi mount context
+  useEffect(() => {
+    (async () => {
+      try {
+        const v = await AsyncStorage.getItem("isInCall");
+        if (v === "1") _setIsInCall(true);
+        else _setIsInCall(false);
+      } catch {}
+    })();
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -74,6 +113,15 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
         transports: ["websocket"],
       });
       socketRef.current = socket;
+
+      socket.on("connect", () => {
+        console.log(
+          "[ChatContext] Socket connected:",
+          socket.id,
+          "userId:",
+          user?.id
+        );
+      });
 
       socket.on("private_message", (msg: ChatMessage) => {
         setMessages((prev) => [...prev, mapMessage(msg)]);
@@ -95,7 +143,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       });
       socket.on("friend_request", (data) => {
-        console.log("✅ [AUTO TEST] Nhận event friend_request:", data);
+        // console.log("✅ [AUTO TEST] Nhận event friend_request:", data);
         if (data && data.from && data.from.id) {
           setAutoTestResult("PASS");
         } else {
@@ -106,33 +154,57 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       });
       socket.on("friend_rejected", (data) => {
-        console.log("[AUTO TEST] Nhận event friend_rejected:", data);
+        // console.log("[AUTO TEST] Nhận event friend_rejected:", data);
         // Nếu muốn hiện toast, có thể tích hợp react-native-toast-message ở đây
       });
       // --- Video call signaling ---
       socket.on("call_request", (data) => {
+        console.log("[ChatContext] socket.on call_request:", data);
         if (callRequestCb.current) callRequestCb.current(data);
+        // Chỉ hiển thị popup khi người dùng là người nhận cuộc gọi (không phải người gọi)
+        if (data.receiverId === user.id && data.senderId !== user.id) {
+          setIncomingCall({
+            senderId: data.senderId,
+            senderName: data.senderName || "Người gọi",
+            senderAvatar: data.senderAvatar,
+            type: data.type || "video",
+          });
+        }
       });
       socket.on("call_accept", (data) => {
+        console.log("[ChatContext] socket.on call_accept:", data);
         if (callAcceptCb.current) callAcceptCb.current(data);
+        if (data.senderId === incomingCall?.senderId) setIncomingCall(null);
       });
       socket.on("call_reject", (data) => {
+        console.log("[ChatContext] socket.on call_reject:", data);
         if (callRejectCb.current) callRejectCb.current(data);
+        if (data.senderId === incomingCall?.senderId) setIncomingCall(null);
       });
       socket.on("signaling", (data) => {
+        console.log("[ChatContext] socket.on signaling:", data);
         if (signalCb.current) signalCb.current(data);
+        // Đã loại bỏ logic hiển thị popup khi nhận offer để tránh hiển thị popup hai lần
+        // Chỉ sử dụng sự kiện call_request để hiển thị popup
+      });
+      // Lắng nghe event invite_screening để nhận lời mời realtime
+      socket.on("invite_screening", (data) => {
+        if (data && data.inviteMsg) {
+          setMessages((prev) => [...prev, mapMessage(data.inviteMsg)]);
+        }
       });
     };
     connectSocket();
     return () => {
       if (socketRef.current) socketRef.current.disconnect();
     };
-  }, [user]);
+  }, [user, isInCall]);
 
   const sendMessage = (
     receiverId: number,
     content: string,
-    replyToMessageId?: number
+    replyToMessageId?: number,
+    extraData?: { movie?: Movie; screening?: Screening }
   ) => {
     if (!socketRef.current || !user) return;
     socketRef.current.emit("private_message", {
@@ -140,6 +212,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
       receiverId,
       content,
       replyToMessageId,
+      ...(extraData?.movie ? { movie: extraData.movie } : {}),
+      ...(extraData?.screening ? { screening: extraData.screening } : {}),
     });
   };
 
@@ -159,18 +233,42 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const sendCallRequest = (receiverId: number) => {
     if (!socketRef.current || !user) return;
-    socketRef.current.emit("call_request", { senderId: user.id, receiverId });
+    console.log("[ChatContext] sendCallRequest:", {
+      senderId: user.id,
+      receiverId,
+      senderName: user.name,
+      senderAvatar: user.image,
+    });
+    socketRef.current.emit("call_request", {
+      senderId: user.id,
+      receiverId,
+      senderName: user.name,
+      senderAvatar: user.image,
+    });
   };
   const sendCallAccept = (receiverId: number) => {
     if (!socketRef.current || !user) return;
+    console.log("[ChatContext] sendCallAccept:", {
+      senderId: user.id,
+      receiverId,
+    });
     socketRef.current.emit("call_accept", { senderId: user.id, receiverId });
   };
   const sendCallReject = (receiverId: number) => {
     if (!socketRef.current || !user) return;
+    console.log("[ChatContext] sendCallReject:", {
+      senderId: user.id,
+      receiverId,
+    });
     socketRef.current.emit("call_reject", { senderId: user.id, receiverId });
   };
   const sendSignal = (receiverId: number, signal: any) => {
     if (!socketRef.current || !user) return;
+    console.log("[ChatContext] sendSignal:", {
+      senderId: user.id,
+      receiverId,
+      signal,
+    });
     socketRef.current.emit("signaling", {
       senderId: user.id,
       receiverId,
@@ -188,6 +286,19 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
   };
   const onSignal = (cb: (data: any) => void) => {
     signalCb.current = cb;
+  };
+
+  const acceptIncomingCall = () => {
+    if (incomingCall && sendCallAccept) {
+      sendCallAccept(incomingCall.senderId);
+      setIncomingCall(null);
+    }
+  };
+  const rejectIncomingCall = () => {
+    if (incomingCall && sendCallReject) {
+      sendCallReject(incomingCall.senderId);
+      setIncomingCall(null);
+    }
   };
 
   return (
@@ -208,6 +319,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
         onCallAccept,
         onCallReject,
         onSignal,
+        incomingCall,
+        acceptIncomingCall,
+        rejectIncomingCall,
+        setIncomingCall,
+        isInCall,
+        setIsInCall,
       }}
     >
       {autoTestResult && (
@@ -256,5 +373,7 @@ function mapMessage(msg: any): ChatMessage {
     fileName: msg.fileName ?? msg.file_name,
     replyToMessage: msg.replyToMessage ?? msg.reply_to_message,
     avatar: msg.avatar ?? msg.avatar_url,
+    movie: msg.movie ?? msg.movie_id,
+    screening: msg.screening ?? msg.screening_id,
   };
 }

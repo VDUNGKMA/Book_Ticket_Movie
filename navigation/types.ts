@@ -52,11 +52,21 @@ export type RootStackParamList = {
   Cinemas: undefined;
   CinemasMap: undefined;
   BoxOffice: undefined;
-  VideoCallScreen: { friendId: number; name: string; avatar: string };
+  VideoCallScreen: {
+    friendId: number;
+    name: string;
+    avatar: string;
+    isCallerFlag?: boolean;
+  };
 };
 
 export type MessageStackParamList = {
   MessageHome: undefined;
   MessageDetail: { name: string; avatar: string; friendId: number };
-  VideoCallScreen: { friendId: number; name: string; avatar: string };
+  VideoCallScreen: {
+    friendId: number;
+    name: string;
+    avatar: string;
+    isCallerFlag?: boolean;
+  };
 };

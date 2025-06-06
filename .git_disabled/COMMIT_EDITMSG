@@ -1,0 +1,14 @@
+feat: add initial project setup with assets, components, and screens
+
+- Add various image assets (icons, logos, splash screens)
+- Implement core components (MovieRecommendations, ThemedView, ThemedText)
+- Set up context providers (UserContext, ThemeContext)
+- Add utility functions (formatting, formatters)
+- Configure navigation types and screens
+- Set up Android project files and configurations
+- Add initial screens (MovieList, VideoCall, Security)
+- Configure Expo and React Native dependencies
+- Implement basic theming system
+- Set up project structure with config files
+
+This commit establishes the foundational structure for the BookTicketMovie app with all necessary initial configurations and core functionality.
